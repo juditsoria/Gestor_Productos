@@ -1,12 +1,18 @@
 from tkinter import ttk
 from tkinter import *
 import sqlite3
+import db
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models import Productos
 
 
 class VentanaPrincipal():
-    db = "database/productos.db"
-
     def __init__(self, root):
+        self.db_url = "sqlite:///database/productos.db"
+        self.engine = create_engine(self.db_url)
+        self.Session = sessionmaker(bind=self.engine)
+
         self.ventana = root
         self.ventana.title("App Gestor de Productos")
         self.ventana.resizable(1, 1) # cambiar tamaño ventana
@@ -77,7 +83,7 @@ class VentanaPrincipal():
         s.configure('my.TButton', font=('Arial', 14, 'bold'), background='#FF1493', foreground='black', padding=10)
         self.boton_eliminar = ttk.Button(text='ELIMINAR', command=self.del_producto, style='my.TButton')
         self.boton_eliminar.grid(row=8, column=0, sticky=W + E)
-        self.boton_editar = ttk.Button(text='EDITAR', command=self.edit_producto, style='my.TButton')
+        self.boton_editar = ttk.Button(text='EDITAR', command=self.editar_producto, style='my.TButton')
         self.boton_editar.grid(row=8, column=1, sticky=W + E)
 
         # Crear el canvas para el gráfico de barras
@@ -89,24 +95,20 @@ class VentanaPrincipal():
                                     bg='#FF66B2', fg='black')
         self.titulo_grafico.grid(row=9, column=0, columnspan=2, pady=10)
 
-        # Llamada para obtener los productos después de la inicialización
+        # Llamada para obtener los productos
         self.get_productos()
 
     def obtener_productos(self):
-        # Consulta para obtener los nombres de los productos y su stock
-        query = "SELECT nombre, stock FROM producto"
-        with sqlite3.connect(self.db) as con:
-            cursor = con.cursor()
-            cursor.execute(query)
-            productos = cursor.fetchall()  # Devuelve una lista de tuplas (nombre, stock)
+        session = self.Session()
+        try:
+            productos = session.query(Productos).all()
+        except Exception as e:
+            print("Hubo un error al obtener los productos de la base de datos")
+            print(f"Error: {e}")
+        finally:
+            session.close()
         return productos
 
-    def db_consulta(self, consulta, parametros=()):
-        with sqlite3.connect(self.db) as con:
-            cursor = con.cursor()
-            resultado = cursor.execute(consulta, parametros)
-            con.commit()
-        return resultado
 
     def get_productos(self):
         # Limpiar la tabla de productos antes de mostrar los nuevos
@@ -114,11 +116,13 @@ class VentanaPrincipal():
         for fila in registros_tabla:
             self.tabla.delete(fila)
 
-        query = "SELECT * FROM producto ORDER BY nombre DESC"
-        registros = self.db_consulta(query)
 
-        for fila in registros:
-            self.tabla.insert("", "end", text=fila[1], values=(fila[2], fila[3], fila[4]))
+        productos = self.obtener_productos()
+
+        # Insertar los productos en la tabla
+        for producto in productos:
+            self.tabla.insert("", "end", text=producto.nombre,
+                              values=(producto.precio, producto.stock, producto.categoria))
 
         # Actualizar el gráfico después de obtener los productos
         self.mostrar_grafico()
@@ -130,21 +134,28 @@ class VentanaPrincipal():
         # Obtener los productos y su stock
         productos = self.obtener_productos()
 
+        # Verificar si hay productos antes de continuar
+        if not productos:
+            print("No hay productos disponibles para mostrar en el gráfico.")
+            return  # Salir de la función si la lista está vacía
+
         # Configuración de las barras
         max_height = 200  # Altura máxima de las barras
-        max_stock = max([producto[1] for producto in productos])  # Máximo stock para normalizar las barras
+        max_stock = max([producto.stock for producto in productos])  # Máximo stock para normalizar las barras
         bar_width = 40
         gap = 20
 
         # Dibujar las barras
-        for i, (producto, stock) in enumerate(productos):
+        for i, producto in enumerate(productos):
+            stock = producto.stock
             bar_height = (stock / max_stock) * max_height  # Normalizar la altura de la barra
             x1 = i * (bar_width + gap) + 50  # Posición en el eje X
             y1 = 250 - bar_height  # Posición en el eje Y (invirtiendo para que la barra crezca hacia arriba)
             x2 = x1 + bar_width  # Ancho de la barra
             y2 = 250  # Altura de la barra (el suelo)
             self.canvas.create_rectangle(x1, y1, x2, y2, fill="blue")  # Dibujar la barra
-            self.canvas.create_text(x1 + bar_width / 2, y1 - 10, text=producto, anchor="center", font=('Arial', 10))
+            self.canvas.create_text(x1 + bar_width / 2, y1 - 10, text=producto.nombre, anchor="center",
+                                    font=('Arial', 10))
             self.canvas.create_text(x1 + bar_width / 2, y2 + 10, text=str(stock), anchor="center", font=('Arial', 10))
 
     def validation_nombre(self):
@@ -158,82 +169,173 @@ class VentanaPrincipal():
             return False
 
     def add_producto(self):
+        # Validaciones
         if not self.validation_nombre():
             self.mensaje["text"] = "El nombre es obligatorio y no puede estar vacío"
             return
+
         if not self.validacion_precio():
             self.mensaje["text"] = "El precio es obligatorio y debe de tener un número mayor que 0"
             return
 
-        query = "INSERT INTO producto VALUES(NULL, ?, ?, ?, ?)"
-        parametros = (self.nombre.get(), self.precio.get(), self.stock.get(), self.categoria.get())
-        self.db_consulta(query, parametros)
-        self.mensaje["text"] = "Producto {} añadido con éxito".format(self.nombre.get())
-        self.nombre.delete(0, END)
-        self.precio.delete(0, END)
-        self.categoria.delete(0, END)
-        self.stock.delete(0, END)
-        self.get_productos()
+        session = self.Session()
+        try:
+            nuevo_producto = Productos(
+                nombre=self.nombre.get(),
+                precio=float(self.precio.get()),
+                stock=int(self.stock.get()),
+                categoria=self.categoria.get()
+            )
+            session.add(nuevo_producto)
+            session.commit()
+
+            self.mensaje["text"] = f"Producto {self.nombre.get()} añadido con éxito"
+
+            # Limpiar los campos
+            self.nombre.delete(0, END)
+            self.precio.delete(0, END)
+            self.categoria.delete(0, END)
+            self.stock.delete(0, END)
+
+            self.get_productos()
+
+        except Exception as e:
+            session.rollback()  # Revertir los cambios en caso de error
+            self.mensaje["text"] = f"Hubo un error al añadir el producto: {str(e)}"
+        finally:
+            session.close()
 
     def del_producto(self):
         self.mensaje["text"] = ""
         try:
-            self.tabla.item(self.tabla.selection())["text"][0]
+            nombre = self.tabla.item(self.tabla.selection())["text"]
         except IndexError:
             self.mensaje["text"] = "Por favor selecciona un producto"
             return
 
-        self.mensaje["text"] = ""
-        nombre = self.tabla.item(self.tabla.selection())["text"]
-        query = "DELETE FROM producto WHERE nombre = ?"
-        self.db_consulta(query, (nombre,))
-        self.mensaje["text"] = "Producto {} eliminado con éxito".format(nombre)
+        session = self.Session()  # Crear sesión
+        try:
+            producto = session.query(Productos).filter_by(nombre=nombre).first()
+            if producto:
+                session.delete(producto)
+                session.commit()  # Confirmar los cambios
+                self.mensaje["text"] = f"Producto {nombre} eliminado con éxito"
+            else:
+                self.mensaje["text"] = f"Producto {nombre} no encontrado"
+        except Exception as e:
+            session.rollback()
+            self.mensaje["text"] = f"Hubo un error al eliminar el producto: {str(e)}"
+        finally:
+            session.close()
         self.get_productos()
 
-    def edit_producto(self):
+    def editar_producto(self):
         try:
             nombre = self.tabla.item(self.tabla.selection())["text"]
             precio = self.tabla.item(self.tabla.selection())["values"][0]
+            stock = self.tabla.item(self.tabla.selection())["values"][1]
+            categoria = self.tabla.item(self.tabla.selection())["values"][2]
+            VentanaEditarProducto(self, nombre, precio, self.mensaje, stock, categoria)
         except IndexError:
-            self.mensaje["text"] = "Por favor selecciona un producto"
-            return
-        self.ventana_editar = Toplevel(self.ventana)
+            self.mensaje["text"] = "Por favor, seleccione un producto"
+
+
+class VentanaEditarProducto():
+    def __init__(self, ventana_principal, nombre, precio, stock, categoria, mensaje):
+        self.ventana_principal = ventana_principal
+        self.nombre = nombre
+        self.precio = precio
+        self.stock = stock
+        self.categoria = categoria
+        self.mensaje = mensaje
+        self.ventana_editar = Toplevel()
         self.ventana_editar.title("Editar producto")
 
-        frame_ep = LabelFrame(self.ventana_editar, text="Modificar Producto", font=('Arial', 16, 'bold'), bg='#FF66B2',
-                              fg='white')
-        frame_ep.grid(row=0, column=0, pady=20, columnspan=3, sticky="nsew")
+        # Creación del contenedor Frame para la edición del producto
+        frame_ep = LabelFrame(self.ventana_editar, text="Editar el siguiente Producto")
+        frame_ep.grid(row=0, column=0, columnspan=2, pady=20, padx=20)
 
-        self.input_nombre_nuevo = Entry(frame_ep, font=('Arial', 13))
-        self.input_nombre_nuevo.insert(0, nombre)
-        self.input_nombre_nuevo.grid(row=3, column=1)
+        # Label y Entry para el Nombre antiguo (solo lectura)
+        Label(frame_ep, text="Nombre antiguo: ", font=('Calibri', 16, 'bold')).grid(row=1, column=0)
+        Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=nombre), state='readonly',
+              font=('Calibri', 13)).grid(row=1, column=1)
 
-        Label(frame_ep, text="Precio: ", font=('Arial', 13), bg='#FF66B2', fg='white').grid(row=3, column=0)
+        # Label y Entry para el Nombre nuevo
+        Label(frame_ep, text="Nombre nuevo: ", font=('Calibri', 13)).grid(row=2, column=0)
+        self.input_nombre_nuevo = Entry(frame_ep, font=('Calibri', 13))
+        self.input_nombre_nuevo.grid(row=2, column=1)
+        self.input_nombre_nuevo.focus()
+
+        # Precio antiguo (solo lectura)
+        Label(frame_ep, text="Precio antiguo: ", font=('Calibri', 13)).grid(row=3, column=0)
         Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=precio), state='readonly',
-              font=('Arial', 13)).grid(row=3, column=1)
+              font=('Calibri', 13)).grid(row=3, column=1)
 
-        Label(frame_ep, text="Precio nuevo: ", font=('Arial', 13), bg='#FF66B2', fg='white').grid(row=4, column=0)
-        self.input_precio_nuevo = Entry(frame_ep, font=('Arial', 13))
+        # Precio nuevo
+        Label(frame_ep, text="Precio nuevo: ", font=('Calibri', 13)).grid(row=4, column=0)
+        self.input_precio_nuevo = Entry(frame_ep, font=('Calibri', 13))
         self.input_precio_nuevo.grid(row=4, column=1)
 
-        self.boton_guardar = ttk.Button(frame_ep, text="Guardar cambios", command=self.editar_producto,
-                                        style="my.TButton")
-        self.boton_guardar.grid(row=5, columnspan=2, pady=10, sticky=W + E)
+        # Stock antiguo (solo lectura)
+        Label(frame_ep, text="Stock antiguo: ", font=('Calibri', 13)).grid(row=5, column=0)
+        Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=stock), state='readonly',
+              font=('Calibri', 13)).grid(row=5, column=1)
 
-    def editar_producto(self):
-        nombre_nuevo = self.input_nombre_nuevo.get()
-        precio_nuevo = self.input_precio_nuevo.get()
+        # Stock nuevo
+        Label(frame_ep, text="Stock nuevo: ", font=('Calibri', 13)).grid(row=6, column=0)
+        self.input_stock_nuevo = Entry(frame_ep, font=('Calibri', 13))
+        self.input_stock_nuevo.grid(row=6, column=1)
 
-        query = "UPDATE producto SET nombre = ?, precio = ? WHERE nombre = ?"
-        parametros = (nombre_nuevo, precio_nuevo, self.nombre)
-        self.db_consulta(query, parametros)
-        self.mensaje["text"] = "Producto actualizado con éxito"
+        # Categoría antigua (solo lectura)
+        Label(frame_ep, text="Categoría antigua: ", font=('Calibri', 13)).grid(row=7, column=0)
+        Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=categoria), state='readonly',
+              font=('Calibri', 13)).grid(row=7, column=1)
 
-        self.get_productos()
-        self.ventana_editar.destroy()
+        # Categoría nueva
+        Label(frame_ep, text="Categoría nueva: ", font=('Calibri', 13)).grid(row=8, column=0)
+        self.input_categoria_nueva = Entry(frame_ep, font=('Calibri', 13))
+        self.input_categoria_nueva.grid(row=8, column=1)
+
+        # Botón Actualizar Producto
+        ttk.Style().configure('my.TButton', font=('Calibri', 14, 'bold'))
+        ttk.Button(frame_ep, text="Actualizar Producto", style='my.TButton', command=self.actualizar).grid(row=9,
+                                                                                                           columnspan=2,
+                                                                                                           sticky=W + E)
+
+    def actualizar(self):
+        nuevo_nombre = self.input_nombre_nuevo.get() or self.nombre
+        nuevo_precio = self.input_precio_nuevo.get() or self.precio
+        nuevo_stock = self.input_stock_nuevo.get() or self.stock
+        nuevo_categoria = self.input_categoria_nueva.get() or self.categoria
+
+        if nuevo_nombre and nuevo_precio and nuevo_stock and nuevo_categoria:
+            session = self.ventana_principal.Session()  # Crear sesión
+            try:
+                # Buscar el producto por el nombre antiguo
+                producto = session.query(Productos).filter_by(nombre=self.nombre).first()
+                if producto:
+                    # Actualizar los atributos del producto
+                    producto.nombre = nuevo_nombre
+                    producto.precio = float(nuevo_precio)
+                    producto.stock = int(nuevo_stock)
+                    producto.categoria = nuevo_categoria
+                    session.commit()  # Confirmar los cambios
+                    self.mensaje["text"] = f"El producto {self.nombre} ha sido actualizado con éxito."
+                    self.ventana_principal.get_productos()  # Actualizar la lista de productos
+                else:
+                    self.mensaje["text"] = f"Producto {self.nombre} no encontrado."
+            except Exception as e:
+                session.rollback()  # Revertir en caso de error
+                self.mensaje["text"] = f"Hubo un error al actualizar el producto: {str(e)}"
+            finally:
+                session.close()  # Cerrar sesión
+
+            self.ventana_editar.destroy()
+        else:
+            self.mensaje["text"] = "Todos los campos deben ser completos con datos válidos."
 
 
-# Inicialización de la ventana principal
-root = Tk()
-app = VentanaPrincipal(root)
-root.mainloop()
+if __name__ == "__main__":
+    root = Tk()
+    app = VentanaPrincipal(root)
+    root.mainloop()
