@@ -144,7 +144,7 @@ class VentanaPrincipal():
         max_stock = max([producto.stock for producto in productos])  # Máximo stock para normalizar las barras
         bar_width = 40
         gap = 20
-
+        colors = ["#FF5733", "#33FF57", "#3357FF", "#F1C40F", "#8E44AD"]
         # Dibujar las barras
         for i, producto in enumerate(productos):
             stock = producto.stock
@@ -153,7 +153,8 @@ class VentanaPrincipal():
             y1 = 250 - bar_height  # Posición en el eje Y (invirtiendo para que la barra crezca hacia arriba)
             x2 = x1 + bar_width  # Ancho de la barra
             y2 = 250  # Altura de la barra (el suelo)
-            self.canvas.create_rectangle(x1, y1, x2, y2, fill="blue")  # Dibujar la barra
+            color = colors[i % len(colors)]
+            self.canvas.create_rectangle(x1, y1, x2, y2, fill=color)  # Dibujar la barra
             self.canvas.create_text(x1 + bar_width / 2, y1 - 10, text=producto.nombre, anchor="center",
                                     font=('Arial', 10))
             self.canvas.create_text(x1 + bar_width / 2, y2 + 10, text=str(stock), anchor="center", font=('Arial', 10))
@@ -200,7 +201,7 @@ class VentanaPrincipal():
             self.get_productos()
 
         except Exception as e:
-            session.rollback()  # Revertir los cambios en caso de error
+            session.rollback()
             self.mensaje["text"] = f"Hubo un error al añadir el producto: {str(e)}"
         finally:
             session.close()
@@ -213,7 +214,7 @@ class VentanaPrincipal():
             self.mensaje["text"] = "Por favor selecciona un producto"
             return
 
-        session = self.Session()  # Crear sesión
+        session = self.Session()
         try:
             producto = session.query(Productos).filter_by(nombre=nombre).first()
             if producto:
@@ -252,11 +253,11 @@ class VentanaEditarProducto():
         self.ventana_editar.title("Editar producto")
 
         # Creación del contenedor Frame para la edición del producto
-        frame_ep = LabelFrame(self.ventana_editar, text="Editar el siguiente Producto")
+        frame_ep = LabelFrame(self.ventana_editar, text="Editar el siguiente Producto", bg='#FF66B2')
         frame_ep.grid(row=0, column=0, columnspan=2, pady=20, padx=20)
 
         # Label y Entry para el Nombre antiguo (solo lectura)
-        Label(frame_ep, text="Nombre antiguo: ", font=('Calibri', 16, 'bold')).grid(row=1, column=0)
+        Label(frame_ep, text="Nombre antiguo: ", bg='#FF66B2', font=('Calibri', 16, 'bold')).grid(row=1, column=0)
         Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=nombre), state='readonly',
               font=('Calibri', 13)).grid(row=1, column=1)
 
@@ -267,7 +268,7 @@ class VentanaEditarProducto():
         self.input_nombre_nuevo.focus()
 
         # Precio antiguo (solo lectura)
-        Label(frame_ep, text="Precio antiguo: ", font=('Calibri', 13)).grid(row=3, column=0)
+        Label(frame_ep, text="Precio antiguo: ", bg='#FF66B2', font=('Calibri', 13)).grid(row=3, column=0)
         Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=precio), state='readonly',
               font=('Calibri', 13)).grid(row=3, column=1)
 
@@ -277,7 +278,7 @@ class VentanaEditarProducto():
         self.input_precio_nuevo.grid(row=4, column=1)
 
         # Stock antiguo (solo lectura)
-        Label(frame_ep, text="Stock antiguo: ", font=('Calibri', 13)).grid(row=5, column=0)
+        Label(frame_ep, text="Stock antiguo: ", bg='#FF66B2', font=('Calibri', 13)).grid(row=5, column=0)
         Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=stock), state='readonly',
               font=('Calibri', 13)).grid(row=5, column=1)
 
@@ -287,7 +288,7 @@ class VentanaEditarProducto():
         self.input_stock_nuevo.grid(row=6, column=1)
 
         # Categoría antigua (solo lectura)
-        Label(frame_ep, text="Categoría antigua: ", font=('Calibri', 13)).grid(row=7, column=0)
+        Label(frame_ep, text="Categoría antigua: ", bg='#FF66B2', font=('Calibri', 13)).grid(row=7, column=0)
         Entry(frame_ep, textvariable=StringVar(self.ventana_editar, value=categoria), state='readonly',
               font=('Calibri', 13)).grid(row=7, column=1)
 
@@ -303,36 +304,55 @@ class VentanaEditarProducto():
                                                                                                            sticky=W + E)
 
     def actualizar(self):
-        nuevo_nombre = self.input_nombre_nuevo.get() or self.nombre
-        nuevo_precio = self.input_precio_nuevo.get() or self.precio
-        nuevo_stock = self.input_stock_nuevo.get() or self.stock
-        nuevo_categoria = self.input_categoria_nueva.get() or self.categoria
+        # Obtener los nuevos valores de los campos, o mantener los actuales si están vacíos
+        nuevo_nombre = self.input_nombre_nuevo.get().strip() or self.nombre
+        nuevo_precio = float(self.input_precio_nuevo.get()) if self.input_precio_nuevo.get() else float(self.precio)
+        nuevo_stock = int(self.input_stock_nuevo.get()) if self.input_stock_nuevo.get() else int(self.stock)
+        nueva_categoria = self.input_categoria_nueva.get().strip() or self.categoria
 
-        if nuevo_nombre and nuevo_precio and nuevo_stock and nuevo_categoria:
-            session = self.ventana_principal.Session()  # Crear sesión
-            try:
-                # Buscar el producto por el nombre antiguo
-                producto = session.query(Productos).filter_by(nombre=self.nombre).first()
-                if producto:
-                    # Actualizar los atributos del producto
-                    producto.nombre = nuevo_nombre
-                    producto.precio = float(nuevo_precio)
-                    producto.stock = int(nuevo_stock)
-                    producto.categoria = nuevo_categoria
-                    session.commit()  # Confirmar los cambios
-                    self.mensaje["text"] = f"El producto {self.nombre} ha sido actualizado con éxito."
-                    self.ventana_principal.get_productos()  # Actualizar la lista de productos
-                else:
-                    self.mensaje["text"] = f"Producto {self.nombre} no encontrado."
-            except Exception as e:
-                session.rollback()  # Revertir en caso de error
-                self.mensaje["text"] = f"Hubo un error al actualizar el producto: {str(e)}"
-            finally:
-                session.close()  # Cerrar sesión
+        # Verificar que el precio y el stock son valores válidos
+        try:
+            # Convertir precio y stock si no están vacíos
+            if self.input_precio_nuevo.get() and not self.input_precio_nuevo.get().replace('.', '', 1).isdigit():
+                raise ValueError("El precio debe ser un número válido.")
 
-            self.ventana_editar.destroy()
-        else:
-            self.mensaje["text"] = "Todos los campos deben ser completos con datos válidos."
+            if self.input_stock_nuevo.get() and not self.input_stock_nuevo.get().isdigit():
+                raise ValueError("El stock debe ser un número válido.")
+        except ValueError as e:
+            self.mensaje["text"] = str(e)  # Mostrar mensaje de error
+            return
+
+        # Crear sesión para actualizar el producto
+        session = self.ventana_principal.Session()
+        try:
+            # Buscar el producto en la base de datos
+            producto = session.query(Productos).filter_by(nombre=self.nombre).first()
+            if producto:
+                # Actualizar los valores del producto
+                producto.nombre = nuevo_nombre
+                producto.precio = nuevo_precio
+                producto.stock = nuevo_stock
+                producto.categoria = nueva_categoria
+                session.commit()  # Confirmar los cambios
+
+                # Actualizar la interfaz con un mensaje de éxito
+                self.mensaje["text"] = f"Producto {nuevo_nombre} actualizado con éxito."
+
+                # Actualizar la tabla de productos y el gráfico
+                self.ventana_principal.get_productos()
+                self.ventana_principal.mostrar_grafico()
+
+                # Cerrar la ventana de edición
+                self.ventana_editar.destroy()
+            else:
+                # Si no se encuentra el producto en la base de datos
+                self.mensaje["text"] = f"Producto {self.nombre} no encontrado para actualizar."
+        except Exception as e:
+            # Si ocurre un error durante la actualización
+            session.rollback()
+            self.mensaje["text"] = f"Error al actualizar el producto: {str(e)}"
+        finally:
+            session.close()  # Cerrar la sesión
 
 
 if __name__ == "__main__":
