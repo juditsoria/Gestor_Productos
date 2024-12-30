@@ -54,16 +54,25 @@ Uso
 
 Añadir un producto:
 El formulario de la parte de arriba de la pagina sirve para añadir productos a la Base de Datos
+![Captura de pantalla 2024-12-30 101012](https://github.com/user-attachments/assets/00b9fef4-e448-4af6-a361-ce6302614f34)
+
 
 Ver productos:
 En la ventana principal podrás ver una lista de todos los productos almacenados en la base de datos.
+![Captura de pantalla 2024-12-30 101048](https://github.com/user-attachments/assets/5af77e23-1c78-4a27-acd2-aaf1903d4494)
+
 
 Actualizar un producto:
 Selecciona un producto de la lista, edítalo y guarda los cambios.
+![Captura de pantalla 2024-12-30 101117](https://github.com/user-attachments/assets/615a8c05-e0b7-4671-9e3f-8df0330cb54c)
 
 Eliminar un producto:
 Selecciona un producto de la lista y haz clic en "Eliminar".
 
+![Captura de pantalla 2024-12-30 101145](https://github.com/user-attachments/assets/98f5919f-92e6-4b9d-a00b-69d97d016b69)
+
 Gráfico de stocks:
 La aplicación muestra un gráfico visual de los stocks disponibles de todos los productos en el sistema. 
 Este gráfico se actualiza automáticamente con los cambios en los productos.
+![Captura de pantalla 2024-12-30 101205](https://github.com/user-attachments/assets/2b1aadb0-2cdc-42f5-90f8-8674051afc77)
+
