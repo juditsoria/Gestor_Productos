@@ -137,7 +137,7 @@ class VentanaPrincipal():
         # Verificar si hay productos antes de continuar
         if not productos:
             print("No hay productos disponibles para mostrar en el gráfico.")
-            return  # Salir de la función si la lista está vacía
+            return
 
         # Configuración de las barras
         max_height = 200  # Altura máxima de las barras
@@ -307,7 +307,10 @@ class VentanaEditarProducto():
         # Obtener los nuevos valores de los campos, o mantener los actuales si están vacíos
         nuevo_nombre = self.input_nombre_nuevo.get().strip() or self.nombre
         nuevo_precio = float(self.input_precio_nuevo.get()) if self.input_precio_nuevo.get() else float(self.precio)
-        nuevo_stock = int(self.input_stock_nuevo.get()) if self.input_stock_nuevo.get() else int(self.stock)
+        if self.input_stock_nuevo.get().strip():
+            nuevo_stock = int(self.input_stock_nuevo.get())
+        else:
+            nuevo_stock = int(self.stock.cget("text")) if self.stock.cget("text").strip() else 0
         nueva_categoria = self.input_categoria_nueva.get().strip() or self.categoria
 
         # Verificar que el precio y el stock son valores válidos
