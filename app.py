@@ -1,6 +1,7 @@
 from tkinter import ttk
 from tkinter import *
 import sqlite3
+import sqlite3
 import db
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -38,19 +39,19 @@ class VentanaPrincipal():
         self.precio = Entry(frame, font=('Arial', 12))
         self.precio.grid(row=2, column=1)
 
-        # Label de Categoría
-        self.etiqueta_categoria = Label(frame, text="Categoría: ", font=('Arial', 13), bg='#FF66B2', fg='white')
-        self.etiqueta_categoria.grid(row=3, column=0)
-        # Entry Categoría
-        self.categoria = Entry(frame, font=('Arial', 12))
-        self.categoria.grid(row=3, column=1)
-
         # Label de Stock
         self.etiqueta_stock = Label(frame, text="Stock: ", font=('Arial', 13), bg='#FF66B2', fg='white')
         self.etiqueta_stock.grid(row=4, column=0)
         # Entry Stock
         self.stock = Entry(frame, font=('Arial', 12))
         self.stock.grid(row=4, column=1)
+
+        # Label de Categoría
+        self.etiqueta_categoria = Label(frame, text="Categoría: ", font=('Arial', 13), bg='#FF66B2', fg='white')
+        self.etiqueta_categoria.grid(row=3, column=0)
+        # Entry Categoría
+        self.categoria = Entry(frame, font=('Arial', 12))
+        self.categoria.grid(row=3, column=1)
 
         # Botón Añadir Producto
         s = ttk.Style()
@@ -207,36 +208,58 @@ class VentanaPrincipal():
             session.close()
 
     def del_producto(self):
-        self.mensaje["text"] = ""
+        self.mensaje["text"] = ""  # Limpiar el mensaje
         try:
-            nombre = self.tabla.item(self.tabla.selection())["text"]
+            selected_item = self.tabla.selection()  # Obtener la selección
+            if len(selected_item) != 1:
+                self.mensaje["text"] = "Por favor selecciona un solo producto"
+                return
+
+            # Acceder al nombre del producto utilizando el primer elemento de la selección
+            nombre = self.tabla.item(selected_item[0])["text"]
+
         except IndexError:
             self.mensaje["text"] = "Por favor selecciona un producto"
             return
 
         session = self.Session()
         try:
+            # Buscar el producto en la base de datos
             producto = session.query(Productos).filter_by(nombre=nombre).first()
             if producto:
-                session.delete(producto)
+                session.delete(producto)  # Eliminar el producto
                 session.commit()  # Confirmar los cambios
                 self.mensaje["text"] = f"Producto {nombre} eliminado con éxito"
             else:
                 self.mensaje["text"] = f"Producto {nombre} no encontrado"
         except Exception as e:
-            session.rollback()
+            session.rollback()  # Revertir cambios en caso de error
             self.mensaje["text"] = f"Hubo un error al eliminar el producto: {str(e)}"
         finally:
-            session.close()
-        self.get_productos()
+            session.close()  # Cerrar la sesión
+
+        self.get_productos()  # Actualizar la lista de productos
 
     def editar_producto(self):
         try:
-            nombre = self.tabla.item(self.tabla.selection())["text"]
-            precio = self.tabla.item(self.tabla.selection())["values"][0]
-            stock = self.tabla.item(self.tabla.selection())["values"][1]
-            categoria = self.tabla.item(self.tabla.selection())["values"][2]
+            selected_item = self.tabla.selection()
+
+            # Verificar si hay un elemento seleccionado
+            if not selected_item:
+                raise IndexError  # Genera un error si no hay selección
+
+            # Acceder al primer elemento de la tupla seleccionada (el ID del producto)
+            item_id = selected_item[0]
+
+            # Obtener los valores del producto seleccionado usando el ID
+            nombre = self.tabla.item(item_id)["text"]
+            precio = self.tabla.item(item_id)["values"][0]
+            stock = self.tabla.item(item_id)["values"][1]
+            categoria = self.tabla.item(item_id)["values"][2]
+
+            # Llamar a la ventana de edición con los valores
             VentanaEditarProducto(self, nombre, precio, self.mensaje, stock, categoria)
+
         except IndexError:
             self.mensaje["text"] = "Por favor, seleccione un producto"
 
@@ -310,7 +333,7 @@ class VentanaEditarProducto():
         if self.input_stock_nuevo.get().strip():
             nuevo_stock = int(self.input_stock_nuevo.get())
         else:
-            nuevo_stock = int(self.stock.cget("text")) if self.stock.cget("text").strip() else 0
+            nuevo_stock = int(self.stock.get().strip()) if self.stock.get().strip() else 0
         nueva_categoria = self.input_categoria_nueva.get().strip() or self.categoria
 
         # Verificar que el precio y el stock son valores válidos
